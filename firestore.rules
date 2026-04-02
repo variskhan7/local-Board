@@ -1,0 +1,118 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: ads
+    // Document ID: auto-generated
+    // Fields:
+    //   - title: string (required, 1-100 chars)
+    //   - category: string (required, enum: For Sale, Services, Rentals, Jobs, Lost & Found)
+    //   - description: string (required, 1-2000 chars)
+    //   - price: number (required, >= 0)
+    //   - contact: string (required, 1-200 chars)
+    //   - status: string (required, enum: active, closed)
+    //   - posted_at: timestamp (required)
+    //   - expires_at: timestamp (required)
+    //   - enquiry_count: number (optional, >= 0)
+    //   - featured: bool (optional)
+    //   - uid: string (required) - owner UID
+    //
+    // Subcollection: ads/{adId}/enquiries
+    // Document ID: auto-generated
+    // Fields:
+    //   - ad_id: string (required)
+    //   - name: string (required, 1-100 chars)
+    //   - message: string (required, 1-1000 chars)
+    //   - sent_at: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isAuthenticated() && request.auth.uid == uid;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "abidmlk232@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isRecent(time) {
+      return time > request.time - duration.value(5, 'm') && time < request.time + duration.value(5, 'm');
+    }
+
+    function isValidAd(data) {
+      let categories = ['For Sale', 'Services', 'Rentals', 'Jobs', 'Lost & Found'];
+      let statuses = ['active', 'closed'];
+      return data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+             data.category in categories &&
+             data.description is string && data.description.size() >= 1 && data.description.size() <= 2000 &&
+             data.price is number && data.price >= 0 &&
+             data.contact is string && data.contact.size() >= 1 && data.contact.size() <= 200 &&
+             data.status in statuses &&
+             data.posted_at is timestamp &&
+             data.expires_at is timestamp &&
+             data.uid is string &&
+             (!('featured' in data) || data.featured is bool) &&
+             (!('enquiry_count' in data) || (data.enquiry_count is number && data.enquiry_count >= 0));
+    }
+
+    function isValidEnquiry(data) {
+      return data.ad_id is string &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+             data.message is string && data.message.size() >= 1 && data.message.size() <= 1000 &&
+             data.sent_at is timestamp && isRecent(data.sent_at);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /ads/{adId} {
+      // Anyone can read active ads
+      allow read: if true;
+
+      // Only authenticated users can create ads
+      allow create: if isAuthenticated() && 
+                      isValidAd(request.resource.data) && 
+                      request.resource.data.uid == request.auth.uid &&
+                      isRecent(request.resource.data.posted_at);
+
+      // Only the owner or admin can update their ad
+      allow update: if (isDocOwner() && isValidAd(request.resource.data) && request.resource.data.uid == resource.data.uid) ||
+                      isAdmin() ||
+                      (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['enquiry_count']) && 
+                       request.resource.data.enquiry_count == resource.data.enquiry_count + 1);
+
+      // Only the owner or admin can delete their ad
+      allow delete: if isDocOwner() || isAdmin();
+
+      match /enquiries/{enquiryId} {
+        // Only the ad owner or admin can read enquiries
+        allow read: if isOwner(get(/databases/$(database)/documents/ads/$(adId)).data.uid) || isAdmin();
+
+        // Anyone can send an enquiry
+        allow create: if isValidEnquiry(request.resource.data) && 
+                        request.resource.data.ad_id == adId;
+      }
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+  }
+}

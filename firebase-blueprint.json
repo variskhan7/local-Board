@@ -1,0 +1,45 @@
+{
+  "entities": {
+    "ad": {
+      "title": "Classified Ad",
+      "description": "A local classified advertisement.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The title of the ad." },
+        "category": { "type": "string", "enum": ["For Sale", "Services", "Rentals", "Jobs", "Lost & Found"], "description": "The category of the ad." },
+        "description": { "type": "string", "description": "The detailed description of the ad." },
+        "price": { "type": "number", "description": "The price of the item or service." },
+        "contact": { "type": "string", "description": "The contact information for the poster." },
+        "status": { "type": "string", "enum": ["active", "closed"], "description": "The current status of the ad." },
+        "posted_at": { "type": "string", "format": "date-time", "description": "The timestamp when the ad was posted." },
+        "expires_at": { "type": "string", "format": "date-time", "description": "The timestamp when the ad expires." },
+        "enquiry_count": { "type": "integer", "description": "The number of enquiries received for this ad." },
+        "featured": { "type": "boolean", "description": "Whether the ad is featured and pinned to the top." },
+        "uid": { "type": "string", "description": "The UID of the user who posted the ad." }
+      },
+      "required": ["title", "category", "description", "price", "contact", "status", "posted_at", "expires_at", "uid"]
+    },
+    "enquiry": {
+      "title": "Enquiry",
+      "description": "An enquiry sent to an ad poster.",
+      "type": "object",
+      "properties": {
+        "ad_id": { "type": "string", "description": "The ID of the ad being enquired about." },
+        "name": { "type": "string", "description": "The name of the enquirer." },
+        "message": { "type": "string", "description": "The message from the enquirer." },
+        "sent_at": { "type": "string", "format": "date-time", "description": "The timestamp when the enquiry was sent." }
+      },
+      "required": ["ad_id", "name", "message", "sent_at"]
+    }
+  },
+  "firestore": {
+    "/ads/{adId}": {
+      "schema": "ad",
+      "description": "Collection of classified ads."
+    },
+    "/ads/{adId}/enquiries/{enquiryId}": {
+      "schema": "enquiry",
+      "description": "Subcollection of enquiries for a specific ad."
+    }
+  }
+}
